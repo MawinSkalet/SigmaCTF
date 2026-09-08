@@ -14,6 +14,9 @@ export function config(env = process.env) {
     secure: env.COOKIE_SECURE === 'true', https: env.PUBLIC_HTTPS === 'true',
     maxInstances: Number(env.MAX_INSTANCES || 10), ttlSeconds: 900,
     imagePrefix: env.IMAGE_PREFIX || 'sigmactf', imageTag: env.IMAGE_TAG || 'v1',
-    port: Number(env.PORT || 4000), firewallConfirmed: env.SANDBOX_FIREWALL_CONFIRMED === 'true'
+    port: Number(env.PORT || 4000), firewallConfirmed: env.SANDBOX_FIREWALL_CONFIRMED === 'true',
+    adminHandle: env.ADMIN_HANDLE || null,
+    googleClientId: env.GOOGLE_CLIENT_ID || null,
+    googleClientSecret: env.GOOGLE_CLIENT_SECRET || null
   };
 }

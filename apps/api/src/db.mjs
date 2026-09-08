@@ -14,6 +14,18 @@ export async function migrate(pool, cfg) {
   } catch(e) {
     console.warn('Migration 002 notice:', e.message);
   }
+  try {
+    await pool.query(await readFile(new URL('../migrations/003_google_oauth.sql', import.meta.url),'utf8'));
+  } catch(e) {
+    console.warn('Migration 003 notice:', e.message);
+  }
+  if (cfg.adminHandle) {
+    try {
+      await pool.query('UPDATE users SET is_admin=true WHERE lower(username)=lower($1)', [cfg.adminHandle.trim()]);
+    } catch(e) {
+      console.warn('Admin handle promotion notice:', e.message);
+    }
+  }
   for (const [id,name,category,description,tier,points,delivery,image,port,artifact,flag] of catalog) {
     await pool.query(`INSERT INTO challenges(id,name,category,description,tier,points,delivery,image,port,artifact,flag_hash)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(id) DO UPDATE SET

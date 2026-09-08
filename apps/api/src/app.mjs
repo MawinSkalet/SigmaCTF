@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { ApiError, flagHash, equalHash, hashPassword, verifyPassword } from './security.mjs';
 import { transaction } from './db.mjs';
@@ -35,19 +35,85 @@ export async function createApp({pool,cfg,orchestrator,limit,logger=false}) {
     await throttle(req,reply,`auth:${req.ip}`,15,900);
     const id=randomUUID();
     const passwordHash=await hashPassword(req.body.password);
-    try { await pool.query('INSERT INTO users(id,username,password_hash) VALUES($1,$2,$3)',[id,req.body.username,passwordHash]); }
+    const isAdmin=Boolean(cfg.adminHandle && req.body.username.toLowerCase()===cfg.adminHandle.toLowerCase());
+    try { await pool.query('INSERT INTO users(id,username,password_hash,is_admin) VALUES($1,$2,$3,$4)',[id,req.body.username,passwordHash,isAdmin]); }
     catch(e) { if(e.code==='23505') throw new ApiError(409,'That handle is already taken.'); throw e; }
     setSession(reply,id); reply.code(201); return {id,username:req.body.username};
   });
   app.post('/api/auth/login',{schema:{body:credentials}},async(req,reply)=>{
     await throttle(req,reply,`auth:${req.ip}`,15,900);
     const user=(await pool.query('SELECT * FROM users WHERE lower(username)=lower($1)',[req.body.username])).rows[0];
-    // Run scrypt for unknown accounts as well.
     const ok=await verifyPassword(req.body.password,user?.password_hash || `${'0'.repeat(32)}:${'0'.repeat(128)}`);
     if(!user || !ok) throw new ApiError(401,'Handle or password is incorrect.');
+    if(cfg.adminHandle && user.username.toLowerCase()===cfg.adminHandle.toLowerCase() && !user.is_admin) {
+      await pool.query('UPDATE users SET is_admin=true WHERE id=$1',[user.id]);
+    }
     setSession(reply,user.id); return {id:user.id,username:user.username};
   });
   app.post('/api/auth/logout',async(req,reply)=>{ reply.clearCookie('sigma_session',{path:'/api'}); return {ok:true}; });
+
+  app.get('/api/auth/providers',async()=>({
+    google:Boolean(cfg.googleClientId && cfg.googleClientSecret)
+  }));
+
+  app.get('/api/auth/google',async(req,reply)=>{
+    if(!cfg.googleClientId || !cfg.googleClientSecret) throw new ApiError(503,'Google OAuth is not configured on this server.');
+    const state=randomBytes(24).toString('hex');
+    reply.setCookie('oauth_state',state,{httpOnly:true,secure:cfg.secure,sameSite:'lax',path:'/',maxAge:600});
+    const redirectUri=`${cfg.appOrigin}/api/auth/google/callback`;
+    const authUrl=`https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cfg.googleClientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('openid email profile')}&state=${state}&prompt=select_account`;
+    return reply.redirect(authUrl);
+  });
+
+  app.get('/api/auth/google/callback',async(req,reply)=>{
+    if(!cfg.googleClientId || !cfg.googleClientSecret) throw new ApiError(503,'Google OAuth is not configured on this server.');
+    const {code,state}=req.query;
+    const cookieState=req.cookies?.oauth_state;
+    reply.clearCookie('oauth_state',{path:'/'});
+    if(!state || !cookieState || state!==cookieState) throw new ApiError(400,'Invalid or expired OAuth state. Please try again.');
+    if(!code) throw new ApiError(400,'Missing OAuth authorization code.');
+
+    const tokenRes=await fetch('https://oauth2.googleapis.com/token',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:new URLSearchParams({
+        code,client_id:cfg.googleClientId,client_secret:cfg.googleClientSecret,
+        redirect_uri:`${cfg.appOrigin}/api/auth/google/callback`,grant_type:'authorization_code'
+      })
+    });
+    if(!tokenRes.ok) throw new ApiError(401,'Failed to authenticate with Google.');
+    const tokens=await tokenRes.json();
+
+    const userRes=await fetch('https://openidconnect.googleapis.com/v1/userinfo',{
+      headers:{Authorization:`Bearer ${tokens.access_token}`}
+    });
+    if(!userRes.ok) throw new ApiError(401,'Failed to fetch Google profile.');
+    const profile=await userRes.json();
+
+    let user=(await pool.query('SELECT id,username,is_admin FROM users WHERE google_id=$1',[profile.sub])).rows[0];
+    if(!user && profile.email) {
+      user=(await pool.query('SELECT id,username,is_admin FROM users WHERE lower(email)=lower($1)',[profile.email])).rows[0];
+      if(user) await pool.query('UPDATE users SET google_id=$1 WHERE id=$2',[profile.sub,user.id]);
+    }
+    if(!user) {
+      let baseName=(profile.name || profile.email.split('@')[0] || 'sigma').replace(/[^A-Za-z0-9_]/g,'').slice(0,18);
+      if(baseName.length<3) baseName=`user_${randomBytes(3).toString('hex')}`;
+      let candidate=baseName;
+      const exists=(await pool.query('SELECT 1 FROM users WHERE lower(username)=lower($1)',[candidate])).rows.length>0;
+      if(exists) candidate=`${baseName.slice(0,14)}_${Math.floor(100+Math.random()*900)}`;
+      const id=randomUUID();
+      const isAdmin=Boolean(cfg.adminHandle && candidate.toLowerCase()===cfg.adminHandle.toLowerCase());
+      const dummyPass=`oauth_google:${randomBytes(24).toString('hex')}`;
+      await pool.query('INSERT INTO users(id,username,password_hash,is_admin,google_id,email) VALUES($1,$2,$3,$4,$5,$6)',
+        [id,candidate,dummyPass,isAdmin,profile.sub,profile.email || null]);
+      user={id,username:candidate,is_admin:isAdmin};
+    }
+    if(cfg.adminHandle && user.username.toLowerCase()===cfg.adminHandle.toLowerCase() && !user.is_admin) {
+      await pool.query('UPDATE users SET is_admin=true WHERE id=$1',[user.id]);
+    }
+    setSession(reply,user.id);
+    return reply.redirect('/');
+  });
   const adminAuth=async req=>{
     await auth(req);
     const user=(await pool.query('SELECT is_admin FROM users WHERE id=$1',[req.user.sub])).rows[0];

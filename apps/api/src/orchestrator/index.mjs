@@ -28,8 +28,8 @@ export class Orchestrator {
         const challenge=(await db.query('SELECT * FROM challenges WHERE id=$1 AND enabled=true',[challengeId])).rows[0];
         if (!challenge) throw new ApiError(404,'Challenge not found');
         if (challenge.delivery==='static') throw new ApiError(400,'This challenge has a downloadable artifact.');
-        // Images are server-controlled and never accepted in request payloads.
-        if (!challenge.image?.startsWith(`${this.cfg.imagePrefix}/`)) throw new ApiError(503,'Challenge image is not in the allowed registry.');
+        // Images are server-controlled from the database and never accepted in request payloads.
+        if (!challenge.image || !/^[a-zA-Z0-9_./:-]+$/.test(challenge.image)) throw new ApiError(503,'Challenge image is not configured.');
         const active=(await db.query("SELECT * FROM challenge_instances WHERE status IN ('starting','running')")).rows;
         for (const item of active.filter(i=>i.user_id===userId)) await this.terminate(db,item);
         const others=active.filter(i=>i.user_id!==userId);
