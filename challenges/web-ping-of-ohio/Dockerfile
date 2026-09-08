@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends iputils-ping co
 COPY index.php /var/www/html/index.php
 COPY run.sh /run.sh
 RUN chmod 555 /run.sh
-ENV APACHE_RUN_USER=www-data APACHE_RUN_GROUP=www-data APACHE_RUN_DIR=/tmp APACHE_LOCK_DIR=/tmp APACHE_PID_FILE=/tmp/apache.pid
+ENV APACHE_RUN_USER=www-data APACHE_RUN_GROUP=www-data APACHE_RUN_DIR=/tmp APACHE_LOCK_DIR=/tmp APACHE_LOG_DIR=/tmp APACHE_PID_FILE=/tmp/apache.pid
 USER 10001:10001
 EXPOSE 8080
 CMD ["/run.sh"]
