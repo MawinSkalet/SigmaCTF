@@ -1,0 +1,12 @@
+services:
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: [tunnel, --no-autoupdate, run]
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?Configure a Cloudflare Tunnel token}
+    networks: [edge]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+networks:
+  edge: {external: true, name: sigmactf-edge}

@@ -1,0 +1,13 @@
+node_modules/
+.next/
+.env
+.env.*
+!.env.example
+test-results/
+playwright-report/
+deploy/local/secrets/
+*.log
+*.tsbuildinfo
+deploy/state/
+deploy/traefik/dynamic/*.json
+deploy/traefik/dynamic/*.tmp

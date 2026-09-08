@@ -1,0 +1,26 @@
+{
+  "name": "sigmactf",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/web",
+    "dev:api": "npm run dev -w apps/api",
+    "preview:api": "node tests/preview-server.mjs",
+    "build": "npm run build -w apps/web",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "test:e2e": "playwright test",
+    "artifacts": "python scripts/generate-artifacts.py"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.10",
+    "@playwright/test": "^1.55.0"
+  },
+  "overrides": {
+    "postcss": "8.5.28",
+    "sharp": "0.35.2"
+  }
+}

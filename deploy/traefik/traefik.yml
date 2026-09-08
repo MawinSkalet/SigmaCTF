@@ -1,0 +1,118 @@
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+  docker:
+    endpoint: http://socket-read:2375
+    exposedByDefault: false
+    watch: true
+entryPoints:
+  web:
+    address: ':80'
+  p30000:
+    address: ':30000'
+  p30001:
+    address: ':30001'
+  p30002:
+    address: ':30002'
+  p30003:
+    address: ':30003'
+  p30004:
+    address: ':30004'
+  p30005:
+    address: ':30005'
+  p30006:
+    address: ':30006'
+  p30007:
+    address: ':30007'
+  p30008:
+    address: ':30008'
+  p30009:
+    address: ':30009'
+  p30010:
+    address: ':30010'
+  p30011:
+    address: ':30011'
+  p30012:
+    address: ':30012'
+  p30013:
+    address: ':30013'
+  p30014:
+    address: ':30014'
+  p30015:
+    address: ':30015'
+  p30016:
+    address: ':30016'
+  p30017:
+    address: ':30017'
+  p30018:
+    address: ':30018'
+  p30019:
+    address: ':30019'
+  p30020:
+    address: ':30020'
+  p30021:
+    address: ':30021'
+  p30022:
+    address: ':30022'
+  p30023:
+    address: ':30023'
+  p30024:
+    address: ':30024'
+  p30025:
+    address: ':30025'
+  p30026:
+    address: ':30026'
+  p30027:
+    address: ':30027'
+  p30028:
+    address: ':30028'
+  p30029:
+    address: ':30029'
+  p30030:
+    address: ':30030'
+  p30031:
+    address: ':30031'
+  p30032:
+    address: ':30032'
+  p30033:
+    address: ':30033'
+  p30034:
+    address: ':30034'
+  p30035:
+    address: ':30035'
+  p30036:
+    address: ':30036'
+  p30037:
+    address: ':30037'
+  p30038:
+    address: ':30038'
+  p30039:
+    address: ':30039'
+  p30040:
+    address: ':30040'
+  p30041:
+    address: ':30041'
+  p30042:
+    address: ':30042'
+  p30043:
+    address: ':30043'
+  p30044:
+    address: ':30044'
+  p30045:
+    address: ':30045'
+  p30046:
+    address: ':30046'
+  p30047:
+    address: ':30047'
+  p30048:
+    address: ':30048'
+  p30049:
+    address: ':30049'
+  p30050:
+    address: ':30050'
+api:
+  dashboard: false
+log:
+  level: WARN
+

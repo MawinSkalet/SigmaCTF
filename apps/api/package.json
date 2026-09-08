@@ -1,0 +1,1 @@
+{"name":"@sigmactf/api","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"node --watch src/main.mjs","start":"node src/main.mjs"},"dependencies":{"fastify":"^5.6.0","@fastify/cookie":"^11.0.2","@fastify/helmet":"^13.0.2","@fastify/jwt":"^10.0.0","pg":"^8.16.3","redis":"^5.8.2"}}

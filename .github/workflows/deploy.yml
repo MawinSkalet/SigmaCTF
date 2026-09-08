@@ -1,0 +1,100 @@
+name: Verify, build and publish to Docker Hub
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  DOCKERHUB_USERNAME: mawin82560
+concurrency:
+  group: sigmactf-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: {POSTGRES_PASSWORD: test_only, POSTGRES_DB: sigma_test}
+        ports: ['5432:5432']
+        options: --health-cmd='pg_isready -U postgres' --health-interval=5s --health-timeout=3s --health-retries=20
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: --health-cmd='redis-cli ping' --health-interval=5s --health-timeout=3s --health-retries=20
+    env:
+      DATABASE_TEST_URL: postgres://postgres:test_only@localhost:5432/sigma_test
+      REDIS_TEST_URL: redis://localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '22', cache: npm}
+      - run: npm ci
+      - run: python3 scripts/generate-artifacts.py
+      - run: npm test
+      - run: npm audit --audit-level=high
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with: {name: playwright-results, path: test-results/}
+  images:
+    needs: verify
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - {name: backend, context: '.', file: apps/api/Dockerfile}
+          - {name: web, context: '.', file: apps/web/Dockerfile}
+          - {name: web-ping-of-ohio, context: challenges/web-ping-of-ohio, file: challenges/web-ping-of-ohio/Dockerfile}
+          - {name: pwn-sigma-overflow, context: challenges/pwn-sigma-overflow, file: challenges/pwn-sigma-overflow/Dockerfile}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:v1
+            ${{ env.DOCKERHUB_USERNAME }}/${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+  deploy:
+    needs: images
+    # Configure this environment with approval protection and deployment secrets.
+    environment: production
+    if: github.ref == 'refs/heads/main' && vars.AZURE_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure verified SSH host
+        env:
+          SSH_KEY: ${{ secrets.AZURE_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.AZURE_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Transfer tested source and switch healthy application slot
+        env:
+          HOST: ${{ secrets.AZURE_HOST }}
+          USER: ${{ secrets.AZURE_USER }}
+          RELEASE: ${{ github.sha }}
+        run: |
+          [[ "$HOST" =~ ^[a-zA-Z0-9.-]+$ && "$USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || exit 1
+          tar --exclude=.git -czf release.tar.gz apps challenges deploy scripts package.json package-lock.json
+          scp release.tar.gz "$USER@$HOST:/opt/sigmactf-release.tar.gz"
+          ssh "$USER@$HOST" "cd /opt/sigmactf && tar -xzf /opt/sigmactf-release.tar.gz && IMAGE_PREFIX=$DOCKERHUB_USERNAME IMAGE_TAG=$RELEASE bash scripts/deploy.sh"

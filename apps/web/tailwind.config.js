@@ -1,0 +1,1 @@
+module.exports={content:['./app/**/*.{js,ts,jsx,tsx}'],theme:{extend:{colors:{void:{950:'#050507',900:'#0B0C10',800:'#14161F'},terminal:{toxic:'#22C55E',sigma:'#EAB308',cooked:'#EF4444',aura:'#A855F7'}}}},plugins:[]};

@@ -1,0 +1,3 @@
+import {defineConfig,devices} from '@playwright/test';
+const live=process.env.LIVE_DOCKER==='1';
+export default defineConfig({testDir:'./tests/e2e',fullyParallel:false,workers:1,timeout:60000,use:{baseURL:process.env.BASE_URL||'http://localhost:3000',trace:'retain-on-failure',screenshot:'only-on-failure'},projects:[{name:'chromium',use:{...devices['Desktop Chrome']}}],webServer:live?undefined:[{command:'npm run preview:api',url:'http://127.0.0.1:4000/api/health',reuseExistingServer:!process.env.CI},{command:'npm run dev',url:'http://localhost:3000',reuseExistingServer:!process.env.CI,timeout:120000}]});
