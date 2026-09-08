@@ -3,7 +3,7 @@ providers:
     directory: /etc/traefik/dynamic
     watch: true
   docker:
-    endpoint: http://socket-read:2375
+    endpoint: tcp://socket-read:2375
     exposedByDefault: false
     watch: true
 entryPoints:
