@@ -11,3 +11,4 @@ deploy/local/secrets/
 deploy/state/
 deploy/traefik/dynamic/*.json
 deploy/traefik/dynamic/*.tmp
+release.tar.gz

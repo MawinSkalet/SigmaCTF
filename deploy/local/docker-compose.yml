@@ -111,6 +111,7 @@ services:
     tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
   janitor:
     image: ${IMAGE_PREFIX:-sigmactf}/backend:${IMAGE_TAG:-v1}
+    build: {context: ../.., dockerfile: apps/api/Dockerfile}
     restart: unless-stopped
     environment:
       <<: *api-env

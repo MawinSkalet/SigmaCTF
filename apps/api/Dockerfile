@@ -1,5 +1,7 @@
 FROM --platform=$BUILDPLATFORM ubuntu:24.04 AS artifacts
-RUN apt-get update && apt-get install -y --no-install-recommends gcc-x86-64-linux-gnu libc6-dev-amd64-cross python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends gcc-x86-64-linux-gnu binutils libc6-dev-amd64-cross python3 \
+    && ([ -f /usr/bin/as ] || ln -s /usr/bin/x86_64-linux-gnu-as /usr/bin/as) \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY challenges /src/challenges
 COPY scripts/generate-artifacts.py /src/scripts/generate-artifacts.py
