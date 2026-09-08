@@ -8,7 +8,9 @@ type Board={players:{username:string;aura:number;solves:number}[];firstBloods:{u
 const categories=['All challenges','Web','Pwn','Reverse','Crypto','Forensics'];
 const icons:Record<string,typeof Globe>={Web:Globe,Pwn:Terminal,Reverse:Code2,Crypto:KeyRound,Forensics:Radio};
 async function api(path:string,options:RequestInit={}){
-  const response=await fetch(`/api${path}`,{...options,headers:{'Content-Type':'application/json',...options.headers},credentials:'same-origin'});
+  const headers:Record<string,string>=options.body?{'Content-Type':'application/json'}:{};
+  if(options.headers)Object.assign(headers,options.headers);
+  const response=await fetch(`/api${path}`,{...options,headers,credentials:'same-origin'});
   let data;try{data=await response.json();}catch{throw new Error('The arena is offline. Check the platform services.');}
   if(!response.ok)throw new Error(data.error || 'Request failed');return data;
 }
@@ -40,7 +42,7 @@ export default function Arena(){
     try{setInstance((await api(`/challenges/${selected.id}/spawn`,{method:'POST',body:'{}'})).instance);toast('Cooked & Live 🔥',true);}
     catch(e){toast((e as Error).message);}finally{setBusy('');}
   };
-  const stop=async()=>{setBusy('stop');try{await api('/instances/current',{method:'DELETE'});setInstance(null);toast('Sent to the Void 💀',true);}catch(e){toast((e as Error).message);}finally{setBusy('');}};
+  const stop=async()=>{setBusy('stop');try{await api('/instances/current',{method:'DELETE',body:'{}'});setInstance(null);toast('Sent to the Void 💀',true);}catch(e){toast((e as Error).message);}finally{setBusy('');}};
   const submit=async(e:FormEvent)=>{e.preventDefault();if(!player)return signIn();if(!selected)return;setBusy('flag');try{const r=await api(`/challenges/${selected.id}/submit`,{method:'POST',body:JSON.stringify({flag})});toast(`${r.message}${r.firstBlood?' GIGACHAD BLOOD 🩸':''}`,r.correct);if(r.correct){setFlag('');await refreshPlayer();await refresh();}}catch(e){toast((e as Error).message);}finally{setBusy('');}};
   const authenticate=async(e:FormEvent<HTMLFormElement>)=>{e.preventDefault();const form=new FormData(e.currentTarget);setBusy('auth');try{await api(`/auth/${authMode}`,{method:'POST',body:JSON.stringify({username:form.get('username'),password:form.get('password')})});await refreshPlayer();setAuthOpen(false);toast('You’re in. Make your move.',true);}catch(e){toast((e as Error).message);}finally{setBusy('');}};
   const current=instance && new Date(instance.expires_at)>new Date()?instance:null;
