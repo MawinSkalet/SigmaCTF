@@ -100,7 +100,7 @@ services:
     labels:
       traefik.enable: 'true'
       traefik.docker.network: sigmactf-edge
-      traefik.http.routers.api.rule: 'Host(`${APP_HOST:-ctf.localhost}`) && PathPrefix(`/api`)'
+      traefik.http.routers.api.rule: '(Host(`${APP_HOST:-ctf.localhost}`) || Host(`localhost`) || Host(`127.0.0.1`)) && PathPrefix(`/api`)'
       traefik.http.routers.api.entrypoints: web
       traefik.http.services.api.loadbalancer.server.port: '4000'
     healthcheck:
@@ -133,7 +133,7 @@ services:
     labels:
       traefik.enable: 'true'
       traefik.docker.network: sigmactf-edge
-      traefik.http.routers.web.rule: 'Host(`${APP_HOST:-ctf.localhost}`)'
+      traefik.http.routers.web.rule: 'Host(`${APP_HOST:-ctf.localhost}`) || Host(`localhost`) || Host(`127.0.0.1`)'
       traefik.http.routers.web.entrypoints: web
       traefik.http.services.web.loadbalancer.server.port: '3000'
     security_opt: [no-new-privileges:true]

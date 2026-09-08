@@ -20,7 +20,8 @@ export async function createApp({pool,cfg,orchestrator,limit,logger=false}) {
     reply.header('Cache-Control','no-store');
     if (!['GET','HEAD','OPTIONS'].includes(req.method)) {
       // Required even on sign-in to prevent login CSRF. CLI clients must set Origin too.
-      if(req.headers.origin!==cfg.appOrigin) throw new ApiError(403,'Invalid request origin');
+      const allowedOrigins = [cfg.appOrigin, 'http://localhost:8080', 'http://ctf.localhost:8080', 'http://127.0.0.1:8080'];
+      if(!allowedOrigins.includes(req.headers.origin)) throw new ApiError(403,'Invalid request origin');
     }
   });
   const auth=async req=>{ try { await req.jwtVerify({onlyCookie:true}); } catch { throw new ApiError(401,'Sign in to enter the arena.'); } };
@@ -60,7 +61,7 @@ export async function createApp({pool,cfg,orchestrator,limit,logger=false}) {
     if(!cfg.googleClientId || !cfg.googleClientSecret) throw new ApiError(503,'Google OAuth is not configured on this server.');
     const state=randomBytes(24).toString('hex');
     reply.setCookie('oauth_state',state,{httpOnly:true,secure:cfg.secure,sameSite:'lax',path:'/',maxAge:600});
-    const redirectUri=`${cfg.appOrigin}/api/auth/google/callback`;
+    const redirectUri=cfg.secure ? `${cfg.appOrigin}/api/auth/google/callback` : `http://localhost:${cfg.webPort}/api/auth/google/callback`;
     const authUrl=`https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cfg.googleClientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('openid email profile')}&state=${state}&prompt=select_account`;
     return reply.redirect(authUrl);
   });
@@ -73,12 +74,13 @@ export async function createApp({pool,cfg,orchestrator,limit,logger=false}) {
     if(!state || !cookieState || state!==cookieState) throw new ApiError(400,'Invalid or expired OAuth state. Please try again.');
     if(!code) throw new ApiError(400,'Missing OAuth authorization code.');
 
+    const redirectUri=cfg.secure ? `${cfg.appOrigin}/api/auth/google/callback` : `http://localhost:${cfg.webPort}/api/auth/google/callback`;
     const tokenRes=await fetch('https://oauth2.googleapis.com/token',{
       method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
       body:new URLSearchParams({
         code,client_id:cfg.googleClientId,client_secret:cfg.googleClientSecret,
-        redirect_uri:`${cfg.appOrigin}/api/auth/google/callback`,grant_type:'authorization_code'
+        redirect_uri:redirectUri,grant_type:'authorization_code'
       })
     });
     if(!tokenRes.ok) throw new ApiError(401,'Failed to authenticate with Google.');
