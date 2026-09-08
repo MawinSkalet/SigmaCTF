@@ -108,10 +108,10 @@ services:
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+    tmpfs: [/tmp]
   janitor:
     image: ${IMAGE_PREFIX:-sigmactf}/backend:${IMAGE_TAG:-v1}
-    build: {context: ../.., dockerfile: apps/api/Dockerfile}
+    pull_policy: never
     restart: unless-stopped
     environment:
       <<: *api-env
@@ -136,7 +136,7 @@ services:
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
     read_only: true
-    tmpfs: [/tmp:rw,noexec,nosuid,size=16m]
+    tmpfs: [/tmp]
 networks:
   edge: {name: sigmactf-edge}
   data: {internal: true}
