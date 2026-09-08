@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomUUID, randomBytes, createHmac, timingSafeEqual } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { ApiError, flagHash, equalHash, hashPassword, verifyPassword } from './security.mjs';
 import { transaction } from './db.mjs';
@@ -53,26 +53,58 @@ export async function createApp({pool,cfg,orchestrator,limit,logger=false}) {
   });
   app.post('/api/auth/logout',async(req,reply)=>{ reply.clearCookie('sigma_session',{path:'/api'}); return {ok:true}; });
 
+  const defaultHost=new URL(cfg.appOrigin).host;
+  const signOAuthState=(payload,secret)=>{
+    const data=Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const sig=createHmac('sha256',secret).update(data).digest('base64url');
+    return `${data}.${sig}`;
+  };
+  const verifyOAuthState=(token,secret)=>{
+    if(!token || typeof token!=='string') return null;
+    const dotIdx=token.indexOf('.');
+    if(dotIdx===-1) return null;
+    const data=token.slice(0,dotIdx);
+    const sig=token.slice(dotIdx+1);
+    const expectedSig=createHmac('sha256',secret).update(data).digest('base64url');
+    if(sig.length!==expectedSig.length) return null;
+    if(!timingSafeEqual(Buffer.from(sig),Buffer.from(expectedSig))) return null;
+    try {
+      const parsed=JSON.parse(Buffer.from(data,'base64url').toString('utf8'));
+      if(!parsed.ts || Date.now()-parsed.ts>600000 || parsed.ts>Date.now()+60000) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
   app.get('/api/auth/providers',async()=>({
     google:Boolean(cfg.googleClientId && cfg.googleClientSecret)
   }));
 
   app.get('/api/auth/google',async(req,reply)=>{
     if(!cfg.googleClientId || !cfg.googleClientSecret) throw new ApiError(503,'Google OAuth is not configured on this server.');
-    const state=randomBytes(24).toString('hex');
-    reply.setCookie('oauth_state',state,{httpOnly:true,secure:cfg.secure,sameSite:'lax',path:'/',maxAge:600});
+    const originHost=req.headers.host || defaultHost;
+    const nonce=randomBytes(16).toString('hex');
+    const state=signOAuthState({nonce,ts:Date.now(),originHost},cfg.jwtSecret);
+    reply.setCookie('oauth_state',nonce,{httpOnly:true,secure:cfg.secure,sameSite:'lax',path:'/',maxAge:600});
     const redirectUri=cfg.secure ? `${cfg.appOrigin}/api/auth/google/callback` : `http://localhost:${cfg.webPort}/api/auth/google/callback`;
-    const authUrl=`https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cfg.googleClientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('openid email profile')}&state=${state}&prompt=select_account`;
+    const authUrl=`https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cfg.googleClientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent('openid email profile')}&state=${encodeURIComponent(state)}&prompt=select_account`;
     return reply.redirect(authUrl);
   });
 
   app.get('/api/auth/google/callback',async(req,reply)=>{
     if(!cfg.googleClientId || !cfg.googleClientSecret) throw new ApiError(503,'Google OAuth is not configured on this server.');
     const {code,state}=req.query;
+    if(!code || !state) throw new ApiError(400,'Missing OAuth authorization code or state.');
+
+    const stateData=verifyOAuthState(state,cfg.jwtSecret);
+    if(!stateData) throw new ApiError(400,'Invalid or expired OAuth state. Please try again.');
+
     const cookieState=req.cookies?.oauth_state;
     reply.clearCookie('oauth_state',{path:'/'});
-    if(!state || !cookieState || state!==cookieState) throw new ApiError(400,'Invalid or expired OAuth state. Please try again.');
-    if(!code) throw new ApiError(400,'Missing OAuth authorization code.');
+    if(cookieState && cookieState!==stateData.nonce) {
+      throw new ApiError(400,'OAuth state mismatch. Please try again.');
+    }
 
     const redirectUri=cfg.secure ? `${cfg.appOrigin}/api/auth/google/callback` : `http://localhost:${cfg.webPort}/api/auth/google/callback`;
     const tokenRes=await fetch('https://oauth2.googleapis.com/token',{
@@ -114,8 +146,42 @@ export async function createApp({pool,cfg,orchestrator,limit,logger=false}) {
       await pool.query('UPDATE users SET is_admin=true WHERE id=$1',[user.id]);
     }
     setSession(reply,user.id);
+
+    const originHost=stateData.originHost;
+    const currentHost=req.headers.host;
+    const allowedHosts=[
+      defaultHost,
+      'localhost:8080',
+      'ctf.localhost:8080',
+      '127.0.0.1:8080',
+      `localhost:${cfg.webPort}`,
+      `ctf.localhost:${cfg.webPort}`,
+      `127.0.0.1:${cfg.webPort}`
+    ];
+    if(originHost && allowedHosts.includes(originHost) && originHost!==currentHost) {
+      const exchangeToken=app.jwt.sign({sub:user.id,purpose:'oauth_exchange'},{expiresIn:'60s'});
+      const proto=cfg.secure?'https':'http';
+      return reply.redirect(`${proto}://${originHost}/api/auth/exchange?token=${encodeURIComponent(exchangeToken)}`);
+    }
+
     return reply.redirect('/');
   });
+
+  app.get('/api/auth/exchange',async(req,reply)=>{
+    const {token}=req.query;
+    if(!token) throw new ApiError(400,'Missing exchange token.');
+    try {
+      const decoded=app.jwt.verify(token);
+      if(decoded.purpose!=='oauth_exchange' || !decoded.sub) {
+        throw new ApiError(400,'Invalid exchange token.');
+      }
+      setSession(reply,decoded.sub);
+      return reply.redirect('/');
+    } catch {
+      throw new ApiError(400,'Expired or invalid exchange token.');
+    }
+  });
+
   const adminAuth=async req=>{
     await auth(req);
     const user=(await pool.query('SELECT is_admin FROM users WHERE id=$1',[req.user.sub])).rows[0];
