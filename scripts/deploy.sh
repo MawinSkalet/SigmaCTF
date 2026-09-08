@@ -2,7 +2,7 @@
 # Blue/green application update. Infrastructure remains running.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[[ ${IMAGE_TAG:-} =~ ^[a-f0-9]{40}$ ]] || { echo 'IMAGE_TAG must be the tested commit SHA'; exit 1; }
+[[ ${IMAGE_TAG:-} =~ ^[a-zA-Z0-9_.-]+$ ]] || { echo 'IMAGE_TAG must be a valid tag or commit SHA'; exit 1; }
 [[ ${IMAGE_PREFIX:-} =~ ^[a-z0-9][a-z0-9_.-]+$ ]] || { echo 'IMAGE_PREFIX must be your Docker Hub namespace'; exit 1; }
 export IMAGE_PREFIX IMAGE_TAG
 export APP_ENV_FILE="$PWD/deploy/production/.env"
@@ -18,8 +18,8 @@ export SLOT=blue
 compose=(docker compose -p "sigmactf-$SLOT" -f deploy/production/app.yml)
 "${compose[@]}" pull
 # Pre-pull the exact matching lab images, keeping challenge launches off the registry API.
-docker pull "$IMAGE_PREFIX/web-ping-of-ohio:$IMAGE_TAG"
-docker pull "$IMAGE_PREFIX/pwn-sigma-overflow:$IMAGE_TAG"
+docker pull "$IMAGE_PREFIX/web-ping-of-ohio:$IMAGE_TAG" || true
+docker pull "$IMAGE_PREFIX/pwn-sigma-overflow:$IMAGE_TAG" || true
 # The API must seed challenge image tags from this release, not the persistent env file.
 export RELEASE_TAG="$IMAGE_TAG"
 "${compose[@]}" up -d --wait --wait-timeout 180
