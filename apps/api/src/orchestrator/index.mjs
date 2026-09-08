@@ -65,6 +65,12 @@ export class Orchestrator {
       for (const instance of rows) await this.terminate(db,instance);
     });
   }
+  forceStop(instanceId) {
+    return this.locked(async db => {
+      const rows=(await db.query("SELECT * FROM challenge_instances WHERE id=$1 AND status IN ('starting','running')",[instanceId])).rows;
+      for (const instance of rows) await this.terminate(db,instance);
+    });
+  }
   reap() {
     return this.locked(async db => {
       const instances=(await db.query("SELECT * FROM challenge_instances WHERE status IN ('starting','running')")).rows;

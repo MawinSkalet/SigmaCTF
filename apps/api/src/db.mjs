@@ -9,6 +9,11 @@ export const catalog = [
 ];
 export async function migrate(pool, cfg) {
   await pool.query(await readFile(new URL('../migrations/001_init.sql', import.meta.url),'utf8'));
+  try {
+    await pool.query(await readFile(new URL('../migrations/002_admin_features.sql', import.meta.url),'utf8'));
+  } catch(e) {
+    console.warn('Migration 002 notice:', e.message);
+  }
   for (const [id,name,category,description,tier,points,delivery,image,port,artifact,flag] of catalog) {
     await pool.query(`INSERT INTO challenges(id,name,category,description,tier,points,delivery,image,port,artifact,flag_hash)
       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(id) DO UPDATE SET
