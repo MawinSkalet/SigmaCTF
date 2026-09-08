@@ -10,5 +10,7 @@ deploy/local/secrets/
 *.tsbuildinfo
 deploy/state/
 deploy/traefik/dynamic/*.json
+deploy/traefik/dynamic/*.yaml
+deploy/traefik/dynamic/*.yml
 deploy/traefik/dynamic/*.tmp
 release.tar.gz
